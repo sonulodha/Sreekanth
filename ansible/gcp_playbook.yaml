@@ -1,0 +1,52 @@
+---
+- name: .....
+  hosts: localhost
+  connection: local
+  vars:
+    gcp_project_id: <GCP_PROJECT_ID>
+    zone: <ZONE>
+    region: <REGION>
+    instance_name: <INSTANCE_NAME>
+    service_account_name: <SERVICE_ACCOUNT_NAME>
+    gcp_cred_kind: serviceaccount
+    gcp_cred_file_path: <SERVICE_ACCOUNT_FILE_PATH>
+  tasks:
+    - name: get info on an instance
+      gcp_compute_instance_info:
+        zone: "{{ zone }}"
+        project: "{{ gcp_project_id }}"
+        auth_kind: "{{ gcp_cred_kind }}"
+        service_account_file: "{{ gcp_cred_file_path }}"
+      register: instance_list
+    - name: stop the instance 
+      gcp_compute_instance:
+        name: "{{ instance_name }}"
+        status: STOPPING
+        zone: "{{ zone }}"
+        project: "{{ gcp_project_id }}"
+        auth_kind: "{{ gcp_cred_kind }}"
+        service_account_file: "{{ gcp_cred_file_path }}"
+    - name: create service account 
+      gcp_iam_service_account:
+        name: "{{ service_account_name }}"
+        project: "{{ gcp_project_id }}"
+        auth_kind: "{{ gcp_cred_kind }}"
+        service_account_file: "{{ gcp_cred_file_path }}"
+      ignore_errors: true
+    - name: activate service account 
+      shell: gcloud auth activate-service-account --key-file "{{ gcp_cred_file_path }}"
+    - name: grant the new service account permission to access the 
+      shell: gcloud projects add-iam-policy-binding "{{ gcp_project_id }}" --member=serviceAccount:"{{ service_account_name }}"@"{{ gcp_project_id }}".iam.gserviceaccount.com --role="{{ item }}"
+      with_items:
+        - roles/compute.admin
+        - roles/iam.serviceAccountTokenCreator
+    - name: attache service account with compute engine instance 
+      shell: gcloud compute instances set-service-account "{{ instance_name }}" --zone="{{ zone }}"  --service-account="{{ service_account_name }}"@"{{ gcp_project_id }}".iam.gserviceaccount.com
+    - name: start the instance 
+      gcp_compute_instance:
+        name: "{{ instance_name }}"
+        status: RUNNING
+        zone: "{{ zone }}"
+        project: "{{ gcp_project_id }}"
+        auth_kind: "{{ gcp_cred_kind }}"
+        service_account_file: "{{ gcp_cred_file_path }}"
